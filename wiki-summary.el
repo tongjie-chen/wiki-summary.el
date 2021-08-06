@@ -4,6 +4,8 @@
 
 ;; Author: Danny Gratzer
 ;; URL: https://github.com/jozefg/wiki-summary.el
+;; Package-Version: 20181010.1824
+;; Package-Commit: fa41ab6e50b3b80e54148af9d4bac18fd0405000
 ;; Keywords: wikipedia, utility
 ;; Package-Requires: ((emacs "24"))
 ;; Version: 0.1
@@ -43,6 +45,14 @@
 (defvar wiki--post-url-format-string
   "&prop=extracts&exintro=&explaintext=&format=json&redirects")
 
+(defvar wiki--post-url-image-format-string
+  "&prop=pageimages&format=json&piprop=original"
+  ;; "&prop=pageimages&format=json&piprop=thumbnail&pithumbsize=400"
+  )
+
+(defvar wiki-summary-show-in-buffer nil
+  "Whether show summary in a separate buffer or in tooltip")
+
 ;;;###autoload
 (defun wiki-summary/make-api-query (s)
   "Given a wiki page title, generate the url for the API call
@@ -52,6 +62,42 @@
         (term (url-hexify-string (replace-regexp-in-string " " "_" s))))
     (concat pre term post)))
 
+(defun wiki-summary/make-api-query-image (s)
+  "Given a wiki page title, generate the url for the API call
+   to get the page info"
+  (let ((pre (format wiki--pre-url-format-string wiki-summary-language-string))
+        (post wiki--post-url-image-format-string)
+        (term (url-hexify-string (replace-regexp-in-string " " "_" s))))
+    (concat pre term post)))
+
+(defun wiki-summary/retrieve-image (queried-string)
+  (let* ((url (wiki-summary/make-api-query-image queried-string))
+    ;; (message "the url is %s" url)
+	(result (url-retrieve-synchronously url)))
+    (with-current-buffer result
+      (goto-char url-http-end-of-headers)
+      (let* ((json-object-type 'plist)
+             (json-key-type 'symbol)
+             (json-array-type 'vector)
+             (result (json-read))
+             (image-url (wiki-summary/extract-summary-image result)))
+	;; (message "the image url is %s" image-url)
+	;; (switch-to-buffer buffer)
+	   (list 'image :type (image-type-from-file-name image-url) :data (my-download-as-string image-url))
+         ))
+  ;; (debug)
+
+  ))
+
+
+
+(defun wiki-summary-pos-tip (summary)
+  "Show STRING using pos-tip-show. Source code taken from youdao-dictionary."
+  (pos-tip-show summary nil nil nil 0)
+  (unwind-protect
+      (push (read-event) unread-command-events)
+    (pos-tip-hide)))
+
 ;;;###autoload
 (defun wiki-summary/extract-summary (resp)
   "Given the JSON reponse from the webpage, grab the summary as a string"
@@ -60,8 +106,17 @@
          (info (cadr pages)))
     (plist-get info 'extract)))
 
+(defun wiki-summary/extract-summary-image (resp)
+  "Given the JSON reponse from the webpage, grab the summary as a string"
+  (let* ((query (plist-get resp 'query))
+         (pages (plist-get query 'pages))
+         (info (cadr pages))
+	 (original (plist-get info 'original)))
+	 (plist-get original 'source)
+    ))
+
 ;;;###autoload
-(defun wiki-summary/format-summary-in-buffer (summary)
+(defun wiki-summary/format-summary-in-buffer (summary queried-string)
   "Given a summary, stick it in the *wiki-summary* buffer and display the buffer"
   (let ((buf (generate-new-buffer "*wiki-summary*")))
     (with-current-buffer buf
@@ -69,8 +124,15 @@
       (fill-paragraph)
       (goto-char (point-min))
       (text-mode)
+      (highlight-regexp queried-string 'bold)
+      (condition-case nil
+	  (progn (insert-sliced-image (wiki-summary/retrieve-image queried-string) nil nil 1 1)
+		 ;; (setq line-spacing 0)
+		 (insert "\n"))
+	(error nil))
       (view-mode))
-    (pop-to-buffer buf)))
+    (pop-to-buffer buf)
+    ))
 
 ;;;###autoload
 (defun wiki-summary/format-summary-into-buffer (summary buffer)
@@ -96,6 +158,8 @@
                  nil
                  nil
                  (thing-at-point 'word))))
+  (message "the query is %s" s)
+  (setq queried-string s)
   (save-excursion
     (url-retrieve (wiki-summary/make-api-query s)
        (lambda (events)
@@ -106,9 +170,14 @@
                (json-array-type 'vector))
            (let* ((result (json-read))
                   (summary (wiki-summary/extract-summary result)))
-             (if (not summary)
-                 (message "No article found")
-               (wiki-summary/format-summary-in-buffer summary))))))))
+             (cond ((not summary) (browse-url (concat "http://www.google.com/search?q=" queried-string)))
+		    ((string-match-p "may refer to" summary) (browse-url (concat "http://en.wikipedia.org/wiki/" queried-string)))
+		    (t
+		     (if wiki-summary-show-in-buffer
+			 (wiki-summary/format-summary-in-buffer summary queried-string)
+		       (wiki-summary-pos-tip summary))
+		       )
+		    )))))))
 
 ;;;###autoload
 (defun wiki-summary-insert (s)
