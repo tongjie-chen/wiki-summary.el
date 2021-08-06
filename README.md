@@ -17,3 +17,9 @@ of the page title and insert (or barf if read only) the summary into the current
 You can specify a language encoding (as per the URL for that language) with `M-x customize-variable` and `wiki-summary-language-string`.
 
 [wikiterm]: https://gist.github.com/thedouglenz/193defdb711e0e54d68a
+
+Improved from https://github.com/jozefg/wiki-summary.el by adding
+1. Summary image if the wiki page has one
+2. Highlight the queried word
+3. Fallback to Wikipedia webpage when ambiguious
+4. Fallback to Google search when the term is not in Wikipedia
