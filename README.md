@@ -18,7 +18,7 @@ You can specify a language encoding (as per the URL for that language) with `M-x
 
 [wikiterm]: https://gist.github.com/thedouglenz/193defdb711e0e54d68a
 
---
+===
 Improved from https://github.com/jozefg/wiki-summary.el by adding
 1. Summary image if the wiki page has one
 2. Highlight the queried word
